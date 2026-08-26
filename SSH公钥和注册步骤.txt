@@ -1,0 +1,22 @@
+本机 SSH 公钥（请复制下面整段，粘到 admin.localhost.run 网页里的输入框）
+注册账号 + 粘完这个公钥后，公钥和账号绑定，以后开机后会自动保持同一个 lhr.life 子域名。
+
+================================================================
+公钥全文（从这里开始复制，到 "medsci-platform-pc" 结束，**整段别漏字符**）：
+================================================================
+
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDH4+GMJLwoW9iB8BICZcDwYBDCYLXcZFXwqPq6c4+v3H+jDbjnzKZsZvqHAxdPejMvhHseeFS81vUBarNb5bOpuszpFZB3EdPsy7b8dWu0JDkZisytelKP9sBXHxqQ8j7ke32ZfafNx/c2JvIk8wj7mNibBB42sm0W3HFIdbar9M77g4011rPOxHxKZf7dFJh9vlXMq60i2cUC+/DHts748NU4jnN13Ri4zg2KtcnAoeIVk5CZLlkbmYaAG3slJVki//5VqFJffx3iwf2J14Mgki/Eur5kQuISOfYOYrC8K/6uvPjTqyUNMb+NSwSQ8gy258WvQeEkJj4/Rjt+6Mg96E5JfbaG7BwTVg+SVsmhwOppG+z/AeF8WxeizdIENzf8ch6OHsaPXqHLMByN+iYizw5GgDuR/WVUAL0kYERl3quNis9j+NJzW322s3sSXr3BQD67Lm0wR6ZRZwFNQIaFexyTyO8m3XwRzRDsjeC0dYc+OTlD7HsI6RSfIlJikWb92JV9/6727yIsWHE2PrdR1SCFDklMqfe0K5vXUEyTMssxW7zW8Ki+H7PvkMCmC0DIFGkLEzXsUbtkjBPelvJB05DGANKDGzTUx82Yvqe8SMt1bptJQk7WH5ufU/Iwq2yUaluvTr/qPCZtPcJLtIgUa119eQsckacZruuwwgBiZQ== medsci-platform-pc
+
+================================================================
+复制结束
+================================================================
+
+操作步骤（小白友好版）：
+
+[1] 浏览器打开新标签：https://admin.localhost.run/
+[2] 用你的邮箱（比如 QQ 邮箱）注册一个账号。
+    - 输入邮箱 → 点发送验证码 → 去邮箱抄验证码 → 输入验证码 → 点 submit
+    （如果 admin 页面有"add SSH key"或类似输入框/页面，直接进入步骤 [3]）
+[3] 把上面整段公钥粘进去，点保存/submit。
+    - 如果页面让你"再起一台机器也要这公钥"——直接确认（这是同台电脑）。
+[4] 完成后告诉我，我帮你改 start-tunnel.bat 让它自动用这把钥匙登录（不用再带 nokey@）。

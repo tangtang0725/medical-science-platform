@@ -1,0 +1,11 @@
+{
+  "name": "medical-science-platform",
+  "version": "1.0.0",
+  "description": "医学科普内容自动生成与审核发布平台（零依赖，纯Node.js内置模块）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "migrate": "node migrate.js"
+  }
+}
