@@ -94,3 +94,19 @@ node migrate.js https://medsci-platform.up.railway.app
 
 **Q：审核员现在用 guroulian.serveousercontent.com 还能用吗？**
 能，但那是依赖你电脑的临时方案。上云后请把新地址 `xxx.up.railway.app` 发给审核员。
+
+---
+
+## 📌 实际部署记录（2026-08-26 已完成）
+
+- **云地址（主用）**：`https://medical-science-platform-production.up.railway.app`
+- **GitHub 仓库**：`https://github.com/tangtang0725/medical-science-platform`
+- **Railway 项目 ID**：`1e083b46-b364-427e-9ee6-0cd69f2fe5a3`
+- **服务 ID**：`e82237bd-051a-43af-ab79-f0551b3be8d8`
+- **持久卷（/data）ID**：`1474bc64-db72-4cbe-8666-752b13e361f7`
+- **环境变量**：`CONTENT_API_KEY=medsci-2026`、`DATA_DIR=/data`
+- **已迁移**：本地 8 篇文章全部推送成功，重部署验证数据不丢 ✅
+- **沙箱里的 Railway CLI**：`C:/Users/Junchao Fang/.workbuddy/binaries/node/workspace/railway.exe`（v5.44.1，经 `ghfast.top` 镜像下载）
+- **每日自动生成任务**：目前仍推 `localhost:3000`，建议改成推上方云地址，本机关机也能入库
+
+> ⚠️ 部署用过的 Railway API Token 请去 railway.app → Account Settings → API Tokens 里 **Revoke** 掉。

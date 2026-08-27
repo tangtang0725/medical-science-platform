@@ -1,0 +1,9 @@
+data/
+node_modules/
+*.log
+cloudflared.exe
+cloudflared-new.exe
+cloudflared2.exe
+.git/
+.workbuddy/
+*.bat

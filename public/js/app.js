@@ -596,7 +596,7 @@ async function openCopyModal(type, id) {
         <button class="copy-tab ${type === 'wechat' ? 'active' : ''}" onclick="switchCopyTab('wechat')">公众号格式</button>
         <button class="copy-tab ${type === 'xiaohongshu' ? 'active' : ''}" onclick="switchCopyTab('xiaohongshu')">小红书格式</button>
       </div>
-      <div id="copyContent" class="copy-content">${escapeHtml(type === 'wechat' ? wechatContent : xhsContent)}</div>
+      <div id="copyContent" class="copy-content">${type === 'wechat' ? wechatContent : xhsContent}</div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-primary" onclick="copyContent()">复制全部</button>
@@ -610,9 +610,9 @@ function switchCopyTab(type) {
   const article = currentArticle;
   const content = document.getElementById('copyContent');
   if (type === 'wechat') {
-    content.textContent = article.wechatHtml || '';
+    content.innerHTML = article.wechatHtml || '';
   } else {
-    content.textContent = article.xiaohongshuContent || '';
+    content.innerHTML = article.xiaohongshuContent || '';
   }
   document.querySelectorAll('.copy-tab').forEach((t, i) => {
     t.classList.toggle('active', (i === 0 && type === 'wechat') || (i === 1 && type === 'xiaohongshu'));
@@ -620,16 +620,26 @@ function switchCopyTab(type) {
 }
 
 function copyContent() {
-  const text = document.getElementById('copyContent').textContent;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(() => {
-      showToast('已复制到剪贴板');
-    }).catch(() => {
+  const el = document.getElementById('copyContent');
+  const html = el.innerHTML;
+  const text = el.innerText;
+  // 优先复制富文本(text/html)，公众号编辑器粘贴可保留标题/加粗/列表排版
+  if (navigator.clipboard && window.ClipboardItem) {
+    try {
+      navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([text], { type: 'text/plain' })
+        })
+      ]).then(() => showToast('已复制（带排版，可直接粘到公众号）'))
+        .catch(() => fallbackCopy(text));
+      return;
+    } catch (e) {
       fallbackCopy(text);
-    });
-  } else {
-    fallbackCopy(text);
+      return;
+    }
   }
+  fallbackCopy(text);
 }
 
 function fallbackCopy(text) {
