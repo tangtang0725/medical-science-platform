@@ -18,7 +18,7 @@
       <h1 id="pageTitle">医学科普审核</h1>
       <div class="header-right">
         <div class="stats-badge" id="statsBadge">0</div>
-        <div class="settings-icon" id="autoGenBtn" onclick="autoGenerate()" title="自动生成一篇（AI 自动选题，约 10-30 秒）">
+        <div class="settings-icon" id="autoGenBtn" onclick="openAutoGenModal()" title="自动生成一篇（AI 自动选题，约 10-30 秒）">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M13 2L4.5 13.5H11L9.5 22L19 10H12.5L13 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
         </div>
         <div class="settings-icon" onclick="openCustomModal()" title="发起定制内容">
@@ -84,6 +84,26 @@
     <div id="editView" class="view">
       <div class="edit-content" id="editContent">
         <!-- Edit form will be rendered here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Auto Generate Modal -->
+  <div id="autoGenModal" class="modal" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>自动生成一篇</h3>
+        <button class="close-btn" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="custom-desc">AI 会自动挑选一个还没写过的主题，生成一篇完整文章进入待审核列表，约需 10-30 秒。</p>
+        <div class="settings-form-group">
+          <label>分类</label>
+          <select id="autoGenCategory"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="autoGenSubmitBtn" onclick="submitAutoGenerate()">开始生成</button>
       </div>
     </div>
   </div>

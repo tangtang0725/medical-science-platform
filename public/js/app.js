@@ -679,16 +679,28 @@ function closeModal(event) {
 }
 
 // ============ Auto Generate（触发式自动生成） ============
-async function autoGenerate() {
-  const btn = document.getElementById('autoGenBtn');
+function openAutoGenModal() {
+  const sel = document.getElementById('autoGenCategory');
+  if (sel) {
+    const opts = ['<option value="">自动均衡（推荐，选篇数最少的分类）</option>']
+      .concat(CATEGORIES.filter(c => c.enabled).map(c => `<option value="${c.key}">${c.key}</option>`));
+    sel.innerHTML = opts.join('');
+  }
+  document.getElementById('autoGenModal').classList.add('active');
+}
+
+async function submitAutoGenerate() {
+  const category = document.getElementById('autoGenCategory').value;
+  const btn = document.getElementById('autoGenSubmitBtn');
   if (btn && btn.disabled) return; // 防重复点击
   const originalHtml = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="btn-spinner"></div>'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="btn-spinner"></div> 生成中…'; }
 
   showToast('AI 正在选题并生成，约需 10-30 秒…');
   try {
-    const res = await API.post('/api/articles/auto-generate', {});
+    const res = await API.post('/api/articles/auto-generate', category ? { category } : {});
     if (res && res.id) {
+      closeModal();
       showToast('已生成：「' + res.title + '」（' + res.category + '）');
       showView('listView');
       loadArticles();
