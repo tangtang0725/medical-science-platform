@@ -73,7 +73,7 @@ function generateId() {
 }
 
 // ============ AI Revision ============
-function callAI(prompt, settings) {
+function callAI(prompt, settings, systemRole) {
   const ai = settings.ai || {};
   const apiKey = ai.apiKey;
   const apiUrl = ai.apiUrl || 'https://api.deepseek.com/v1/chat/completions';
@@ -83,10 +83,12 @@ function callAI(prompt, settings) {
     return Promise.reject(new Error('未配置 AI API 密钥，请在设置中配置'));
   }
 
+  const system = systemRole || '你是一个专业的医学科普文案编辑。你会根据审核员的意见修改科普文章，确保内容科学准确、通俗易懂。返回纯 JSON，不要包含 markdown 代码块标记。';
+
   const body = JSON.stringify({
     model,
     messages: [
-      { role: 'system', content: '你是一个专业的医学科普文案编辑。你会根据审核员的意见修改科普文章，确保内容科学准确、通俗易懂。返回纯 JSON，不要包含 markdown 代码块标记。' },
+      { role: 'system', content: system },
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
@@ -135,6 +137,14 @@ function callAI(prompt, settings) {
     req.write(body);
     req.end();
   });
+}
+
+// 解析 AI 返回的 JSON（去掉可能的 markdown 代码块标记，提取首个 {...}）
+function parseAIJson(raw) {
+  let cleaned = (raw || '').replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (jsonMatch) return JSON.parse(jsonMatch[0]);
+  throw new Error('AI 未返回有效 JSON');
 }
 
 // ============ Formatters ============
@@ -287,6 +297,181 @@ async function handleRequest(req, res) {
         console.log(`[NEW] ${article.title} (${article.category})`);
         return sendJSON(res, 201, article);
       } catch (e) { return sendJSON(res, 400, { error: e.message }); }
+    }
+
+    // POST /api/articles/custom — 用户/专家提交定制主题，AI 生成（或转交 WorkBuddy）
+    if (method === 'POST' && pathname === '/api/articles/custom') {
+      try {
+        const body = await parseBody(req);
+        const topic = (body.topic || '').trim();
+        const requirements = (body.requirements || '').trim();
+        const category = (body.category || '骨科').trim();
+        const requestedBy = (body.requestedBy || '匿名用户').trim();
+        if (!topic) return sendJSON(res, 400, { error: '主题不能为空' });
+
+        const settings = readSettings();
+        const articles = readArticles();
+
+        if (settings.ai && settings.ai.apiKey) {
+          // 服务端直接调用 AI 生成完整文章
+          const genSystem = '你是一个专业的科普文案编辑，擅长为大众创作科学准确、通俗易懂的文章。你只返回纯 JSON，不要包含任何 markdown 代码块标记。';
+          const genPrompt = `请根据以下主题与要求，创作一篇面向大众的科普文章。
+${category === '电工科普' ? '注意：这是电气/用电安全科普，不是医学内容，重点讲安全常识、隐患识别、正确操作、应急处理，不要给出医疗建议。' : '注意：这是医学/健康科普，内容必须基于循证医学，科学准确，并在文末提示"何时需要就医"。'}
+
+## 主题
+${topic}
+
+## 补充要求
+${requirements || '无'}
+
+## 分类
+${category}
+
+## 写作要求
+- 标题：吸引人但不过度标题党，15-25字
+- 摘要：100-150字概括全文
+- 正文：800-1500字，使用 Markdown 格式（## 标题，**加粗**，- 列表）
+- 结构：引入问题 → 科学解释 → 实用建议 → 温馨提示
+- 通俗易懂，避免过多专业术语；实用性强，提供可操作建议
+- 标签：3-5个相关标签
+${category === '电工科普' ? '' : '- 文末加免责声明：*本文仅供科普参考，不能替代专业医疗建议。如有不适，请及时就医。*'}
+
+## 返回格式（纯 JSON，不要 markdown 代码块）
+{"title":"文章标题","summary":"摘要","content":"正文markdown","tags":["标签1","标签2"]}`;
+
+          console.log(`[CUSTOM] 开始AI生成: ${topic}`);
+          const aiResponse = await callAI(genPrompt, settings, genSystem);
+          const gen = parseAIJson(aiResponse);
+          const article = {
+            id: generateId(),
+            title: gen.title || topic,
+            summary: gen.summary || '',
+            content: gen.content || '',
+            category,
+            tags: gen.tags || [],
+            status: 'pending',
+            xiaohongshuContent: formatForXiaohongshu({ title: gen.title || topic, content: gen.content || '', tags: gen.tags || [], category }),
+            wechatHtml: formatForWechat({ title: gen.title || topic, content: gen.content || '', category }),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            approvedAt: null, publishedAt: null, rejectReason: null,
+          };
+          articles.unshift(article);
+          writeArticles(articles);
+          console.log(`[CUSTOM] 生成完成: ${article.title}`);
+          return sendJSON(res, 201, article);
+        } else {
+          // 未配置 AI Key：转交 WorkBuddy（AI 助手）异步生成
+          const article = {
+            id: generateId(),
+            title: topic,
+            summary: '',
+            content: '',
+            category,
+            tags: [],
+            status: 'needs_revision',
+            customRequest: { topic, requirements, requestedBy, createdAt: new Date().toISOString() },
+            revisionFeedback: `【定制生成请求】主题：${topic}\n补充要求：${requirements || '无'}\n分类：${category}\n提交人：${requestedBy}`,
+            xiaohongshuContent: '',
+            wechatHtml: '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            approvedAt: null, publishedAt: null, rejectReason: null,
+          };
+          articles.unshift(article);
+          writeArticles(articles);
+          console.log(`[CUSTOM] 已转交WorkBuddy待生成: ${topic}`);
+          return sendJSON(res, 200, {
+            status: 'needs_revision',
+            message: '已提交，AI 助手（骨肉相连）将尽快生成内容',
+            article,
+          });
+        }
+      } catch (e) {
+        console.error('[CUSTOM] 错误:', e.message);
+        return sendJSON(res, 500, { error: e.message });
+      }
+    }
+
+    // POST /api/articles/auto-generate — 触发式自动生成（无 body 时按类别均衡自动选题）
+    if (method === 'POST' && pathname === '/api/articles/auto-generate') {
+      try {
+        let body = {};
+        try { body = await parseBody(req); } catch { /* 空 body 合法 */ }
+        const settings = readSettings();
+        if (!(settings.ai && settings.ai.apiKey)) {
+          return sendJSON(res, 400, { error: '未配置 AI API Key，请先在「设置 → AI 修改功能配置」中填写后再使用自动生成' });
+        }
+        const articles = readArticles();
+
+        // 自动生成类别池（心理学暂停自动生成）；未指定时选现有篇数最少的类别保持均衡
+        const autoCategories = ['骨科', '普外科', '电工科普'];
+        const countBy = c => articles.filter(a => a.category === c).length;
+        const requested = (body.category || '').trim();
+        const category = autoCategories.includes(requested)
+          ? requested
+          : autoCategories.reduce((min, c) => (countBy(c) < countBy(min) ? c : min));
+
+        const usedTitles = articles.filter(a => a.category === category).map(a => a.title);
+
+        const genSystem = '你是一个专业的科普文案编辑，擅长为大众创作科学准确、通俗易懂的文章。你只返回纯 JSON，不要包含任何 markdown 代码块标记。';
+        const genPrompt = `请先从下面的"可选主题方向"中挑选一个本次文章主题（必须避开"已写过"列表中已有的主题，选一个还没写过的角度），然后围绕它创作一篇面向大众的科普文章。
+
+## 分类
+${category}
+
+${category === '电工科普'
+  ? '注意：这是电气/用电安全科普，不是医学内容，重点讲安全常识、隐患识别、正确操作、应急处理，不要给出医疗建议。可选主题方向：家庭用电安全、漏电保护、电线老化、电动车充电安全、触电急救、插座使用、电气火灾预防、家电省电误区等。'
+  : category === '普外科'
+    ? '注意：这是医学/健康科普，内容必须基于循证医学，科学准确，并在文中提示"何时需要就医"。可选主题方向：阑尾炎、胆囊结石、疝气、甲状腺结节、痔疮、肛裂、乳腺结节、烧伤烫伤急救、体表肿物、术后护理等。'
+    : '注意：这是医学/健康科普，内容必须基于循证医学，科学准确，并在文中提示"何时需要就医"。可选主题方向：骨质疏松、腰椎间盘突出、关节炎、骨折康复、运动损伤、颈椎病、肩周炎、膝关节问题、扁平足、拇外翻、腱鞘炎、腰肌劳损等。'}
+
+## 已写过（务必避开，不要重复）
+${usedTitles.length ? usedTitles.map(t => '- ' + t).join('\n') : '（该分类暂无文章）'}
+
+## 写作要求
+- 标题：吸引人但不过度标题党，15-25字
+- 摘要：100-150字概括全文
+- 正文：800-1500字，使用 Markdown 格式（## 标题，**加粗**，- 列表）
+- 结构：引入问题 → 科学解释 → 实用建议 → 温馨提示
+- 通俗易懂，避免过多专业术语；实用性强，提供可操作建议
+- 内容包含"何时需要就医"的提醒
+- 标签：3-5个相关标签
+${category === '电工科普' ? '' : '- 文末加免责声明：*本文仅供科普参考，不能替代专业医疗建议。如有不适，请及时就医。*'}
+
+## 返回格式（纯 JSON，不要 markdown 代码块）
+{"topic":"选定的主题（几个字）","title":"文章标题","summary":"摘要","content":"正文markdown","tags":["标签1","标签2"]}`;
+
+        console.log(`[AUTO] 开始自动生成（分类: ${category}）`);
+        const aiResponse = await callAI(genPrompt, settings, genSystem);
+        const gen = parseAIJson(aiResponse);
+        if (!gen.title || !gen.content) {
+          return sendJSON(res, 502, { error: 'AI 返回内容不完整，请重试' });
+        }
+        const article = {
+          id: generateId(),
+          title: gen.title,
+          summary: gen.summary || '',
+          content: gen.content || '',
+          category,
+          tags: gen.tags || [],
+          status: 'pending',
+          autoGenerated: true,
+          generatedTopic: gen.topic || '',
+          xiaohongshuContent: formatForXiaohongshu({ title: gen.title, content: gen.content, tags: gen.tags || [], category }),
+          wechatHtml: formatForWechat({ title: gen.title, content: gen.content, category }),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          approvedAt: null, publishedAt: null, rejectReason: null,
+        };
+        articles.unshift(article);
+        writeArticles(articles);
+        console.log(`[AUTO] 生成完成: ${article.title} (主题: ${gen.topic || '?'})`);
+        return sendJSON(res, 201, article);
+      } catch (e) {
+        console.error('[AUTO] 错误:', e.message);
+        return sendJSON(res, 500, { error: e.message });
+      }
     }
 
     // PUT /api/articles/:id

@@ -5,6 +5,20 @@ let currentArticle = null;
 let currentCopyTab = 'wechat';
 let navigationStack = [];
 
+// ============ Categories ============
+// 所有内容分类；enabled 标记是否参与每日自动生成（心理学暂不自动生成，用户仍可手动定制或编辑已有文章）
+const CATEGORIES = [
+  { key: '骨科', slug: 'orthopedics', enabled: true },
+  { key: '普外科', slug: 'generalsurgery', enabled: true },
+  { key: '电工科普', slug: 'electrician', enabled: true },
+  { key: '心理学', slug: 'psychology', enabled: false },
+];
+
+function catSlug(cat) {
+  const m = CATEGORIES.find(c => c.key === cat);
+  return m ? m.slug : 'default';
+}
+
 // ============ API ============
 const API = {
   async get(path) {
@@ -139,9 +153,9 @@ async function loadArticles() {
     }
 
     list.innerHTML = articles.map(a => `
-      <div class="article-card cat-${a.category === '骨科' ? 'orthopedics' : 'psychology'}" onclick="showDetail('${a.id}')">
+      <div class="article-card cat-${catSlug(a.category)}" onclick="showDetail('${a.id}')">
         <div class="card-header">
-          <span class="category-tag ${a.category === '骨科' ? 'orthopedics' : 'psychology'}">${a.category}</span>
+          <span class="category-tag ${catSlug(a.category)}">${a.category}</span>
           <span class="status-dot ${a.status}"></span>
         </div>
         <h3>${escapeHtml(a.title)}</h3>
@@ -228,12 +242,13 @@ async function showDetail(id) {
     // 待 AI 改稿横幅
     let waitingHtml = '';
     if (article.status === 'needs_revision') {
+      const isCustom = !!article.customRequest;
       waitingHtml = `
         <div class="ai-waiting-banner">
           <div class="ai-waiting-spinner"><div class="spinner"></div></div>
           <div class="ai-waiting-text">
-            <div class="ai-waiting-title">🤖 AI 助手（骨肉相连）正在修改文章…</div>
-            <div class="ai-waiting-sub">已收到您的修改意见，正在生成改稿，本页会自动刷新</div>
+            <div class="ai-waiting-title">🤖 AI 助手（骨肉相连）正在${isCustom ? '生成定制内容' : '修改文章'}…</div>
+            <div class="ai-waiting-sub">${isCustom ? '已收到您的定制主题，正在生成文章，本页会自动刷新' : '已收到您的修改意见，正在生成改稿，本页会自动刷新'}</div>
           </div>
         </div>
         <div class="ai-feedback-box">
@@ -287,7 +302,7 @@ async function showDetail(id) {
     content.innerHTML = `
       <div class="detail-meta">
         <div class="meta-row">
-          <span class="category-tag ${article.category === '骨科' ? 'orthopedics' : 'psychology'}">${article.category}</span>
+          <span class="category-tag ${catSlug(article.category)}">${article.category}</span>
           <span class="status-badge ${article.status}">${getStatusText(article.status)}</span>
         </div>
         <h2 class="detail-title">${escapeHtml(article.title)}</h2>
@@ -452,8 +467,8 @@ function showEdit(id) {
       <div class="form-group">
         <label>分类</label>
         <select id="editCategory">
-          <option value="骨科" ${article.category === '骨科' ? 'selected' : ''}>骨科</option>
-          <option value="心理学" ${article.category === '心理学' ? 'selected' : ''}>心理学</option>
+          ${CATEGORIES.map(c => `<option value="${c.key}" ${article.category === c.key ? 'selected' : ''}>${c.key}</option>`).join('')}
+          ${!CATEGORIES.some(c => c.key === article.category) ? `<option value="${escapeAttr(article.category)}" selected>${escapeHtml(article.category)}</option>` : ''}
         </select>
       </div>
       <div class="form-group">
@@ -541,7 +556,7 @@ async function showPublish(id) {
           ${isPublished ? '已发布' : '复制下方排版好的内容，粘贴到微信公众号编辑器中即可发布。'}
           ${!article.wechatAppId ? '<br>⚠️ 尚未配置公众号API，暂使用手动复制方式。配置API后可一键自动发布。' : ''}
         </p>
-        <div class="preview-box">${escapeHtml(article.wechatHtml || '').substring(0, 500)}...</div>
+        <div class="preview-box wechat-preview">${article.wechatHtml || '（暂无公众号格式内容）'}</div>
         <div style="margin-top:10px;">
           <button class="btn btn-outline" onclick="openCopyModal('wechat', '${article.id}')">查看并复制完整内容</button>
         </div>
@@ -660,7 +675,78 @@ function fallbackCopy(text) {
 
 function closeModal(event) {
   if (event && event.target !== event.currentTarget) return;
-  document.getElementById('copyModal').classList.remove('active');
+  document.querySelectorAll('.modal.active').forEach(m => m.classList.remove('active'));
+}
+
+// ============ Auto Generate（触发式自动生成） ============
+async function autoGenerate() {
+  const btn = document.getElementById('autoGenBtn');
+  if (btn && btn.disabled) return; // 防重复点击
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="btn-spinner"></div>'; }
+
+  showToast('AI 正在选题并生成，约需 10-30 秒…');
+  try {
+    const res = await API.post('/api/articles/auto-generate', {});
+    if (res && res.id) {
+      showToast('已生成：「' + res.title + '」（' + res.category + '）');
+      showView('listView');
+      loadArticles();
+    } else {
+      showToast('生成失败，请重试');
+    }
+  } catch (err) {
+    showToast('生成失败: ' + err.message);
+  }
+  if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
+}
+
+// ============ Custom Content ============
+function openCustomModal() {
+  const sel = document.getElementById('customCategory');
+  if (sel) {
+    sel.innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.key}</option>`).join('');
+  }
+  document.getElementById('customTopic').value = '';
+  document.getElementById('customRequirements').value = '';
+  document.getElementById('customRequester').value = '';
+  document.getElementById('customModal').classList.add('active');
+}
+
+async function submitCustomContent() {
+  const topic = document.getElementById('customTopic').value.trim();
+  const requirements = document.getElementById('customRequirements').value.trim();
+  const category = document.getElementById('customCategory').value;
+  const requestedBy = document.getElementById('customRequester').value.trim();
+  const btn = document.getElementById('customSubmitBtn');
+
+  if (!topic) {
+    showToast('请先填写主题');
+    document.getElementById('customTopic').focus();
+    return;
+  }
+
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="btn-spinner"></div> 提交中...';
+
+  try {
+    const res = await API.post('/api/articles/custom', { topic, requirements, category, requestedBy });
+    closeModal();
+    if (res && res.status === 'needs_revision') {
+      showToast('已提交，AI 助手正在生成…请稍候刷新');
+    } else if (res && res.id) {
+      showToast('已生成：「' + res.title + '」');
+    } else {
+      showToast('已提交');
+    }
+    showView('listView');
+    loadArticles();
+  } catch (err) {
+    showToast('提交失败: ' + err.message);
+  }
+  btn.disabled = false;
+  btn.innerHTML = originalHtml;
 }
 
 // ============ Settings ============
